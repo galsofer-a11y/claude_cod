@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>מחשבון</title>
+<style>
+  :root { --bg:#e5ebe7; --body:#21312c; --key:#30443d; --text:#f2f6f3; --muted:#a3b7af; --accent:#f3bd4e; }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; padding:16px; display:flex; flex-wrap:wrap; gap:20px; align-items:center; justify-content:center; align-content:center; background:var(--bg); font:16px "Segoe UI",Arial,sans-serif; }
+  main, aside { width:min(100%,360px); border-radius:24px; padding:20px; }
+  main { background:var(--body); color:var(--text); }
+  .screen { direction:ltr; text-align:right; margin-bottom:16px; }
+  #expr { height:64px; line-height:64px; font-size:36px; white-space:nowrap; overflow-x:auto; scrollbar-width:none; }
+  #preview { height:28px; color:var(--muted); font-size:20px; overflow:hidden; }
+  .keys { direction:ltr; display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+  button { font:inherit; cursor:pointer; }
+  .keys button { height:56px; border:0; border-radius:14px; background:var(--key); color:var(--text); font-size:22px; }
+  .keys button:hover { filter:brightness(1.18); }
+  .keys button:active { transform:scale(.95); }
+  .keys .op { color:var(--accent); }
+  .keys .equal { background:var(--accent); color:var(--body); }
+  button:focus-visible { outline:3px solid #66b9e8; outline-offset:2px; }
+  aside { background:#fff; height:360px; display:flex; flex-direction:column; }
+  header { display:flex; justify-content:space-between; align-items:center; }
+  h1 { font-size:20px; margin:0; }
+  #clear { border:0; background:none; color:#4c655c; }
+  ol { direction:ltr; list-style:none; padding:0; overflow:auto; }
+  li button { width:100%; padding:10px; border:0; border-bottom:1px solid var(--bg); background:none; text-align:right; overflow-wrap:anywhere; }
+  .empty { color:#4c655c; text-align:center; direction:rtl; padding-top:32px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="screen"><div id="expr">0</div><div id="preview" aria-live="polite"></div></div>
+  <div class="keys" id="keys"></div>
+</main>
+<aside>
+  <header><h1>היסטוריה</h1><button id="clear">ניקוי</button></header>
+  <ol id="history"></ol>
+</aside>
+
+<script id="engine">
+const NUMBER = String.raw`(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]\d+)?`;
+
+function calculate(source) {
+  const tokens = source.match(new RegExp(NUMBER + '|\\S', 'g')) || [];
+  let i = 0;
+  const take = (...options) => options.includes(tokens[i]) ? tokens[i++] : null;
+
+  // 200+10% = 220: a lone percentage in a sum is relative to the left side
+  function sum() {
+    let left = product(), op;
+    let value = left.value;
+    while ((op = take('+', '-'))) {
+      const right = product();
+      const change = (op === '+' ? 1 : -1) * (right.percent ? value * right.value : right.value);
+      const next = value + change;
+      // Hide floating point residue, as in 0.1+0.2-0.3
+      value = Math.abs(next) <= Number.EPSILON * 2 * (Math.abs(value) + Math.abs(change)) ? 0 : next;
+      left = { value };
+    }
+    return left;
+  }
+  function product() {
+    let left = signed(), op;
+    while ((op = take('*', '/'))) {
+      const right = signed().value;
+      if (op === '/' && right === 0) throw Error('אי אפשר לחלק באפס');
+      left = { value: op === '*' ? left.value * right : left.value / right };
+    }
+    return left;
+  }
+  function signed() {
+    if (!take('-')) return power();
+    const item = signed();
+    return { ...item, value: -item.value };
+  }
+  function power() {
+    const base = atom();
+    return take('^') ? { value: base.value ** signed().value } : base;
+  }
+  function atom() {
+    let value;
+    if (take('(')) {
+      value = sum().value;
+      if (!take(')') && i < tokens.length) throw Error('ביטוי לא תקין');
+    } else {
+      value = Number(tokens[i++]);
+      if (Number.isNaN(value)) throw Error('ביטוי לא תקין');
+    }
+    let percent = false;
+    while (take('%')) { value /= 100; percent = true; }
+    return { value, percent };
+  }
+
+  const { value } = sum();
+  if (i < tokens.length) throw Error('ביטוי לא תקין');
+  if (!Number.isFinite(value)) throw Error('אין תוצאה מוגדרת');
+  return String(Number.isSafeInteger(value) ? value : Number(value.toPrecision(12)));
+}
+
+function press({ text, done }, key) {
+  const result = next => ({ text: next, done: false });
+  if (key === 'C') return result('');
+  if (key === 'back') return result(done ? '' : text.slice(0, -1));
+  if (key === 'sign') {
+    if (!text || text === '-') return result(text ? '' : '-');
+    if (new RegExp(`^-${NUMBER}$`).test(text)) return result(text.slice(1));
+    const negative = text.match(new RegExp(`\\(-(${NUMBER})\\)$`));
+    if (negative) return result(text.slice(0, negative.index) + negative[1]);
+    const last = text.match(new RegExp(`${NUMBER}$`));
+    return result(last ? text.slice(0, last.index) + `(-${last[0]})` : text);
+  }
+  if (/^[\d.]$/.test(key)) {
+    if (done) text = '';
+    // Keep typing inside a number that was just negated
+    const negative = text.match(/\(-[\d.]+\)$/);
+    if (negative) text = text.slice(0, -1);
+    const current = text.match(/[\d.]*$/)[0];
+    if (key === '.') {
+      if (current.includes('.')) return result(text + (negative ? ')' : ''));
+      if (!current) key = '0.';
+    } else if (current === '0') text = text.slice(0, -1);
+    if (!current && /[)%]$/.test(text)) text += '*';
+    return result(text + key + (negative ? ')' : ''));
+  }
+  if (key === '(') {
+    if (done) text = '';
+    return result(text + (/[\d.)%]$/.test(text) ? '*(' : '('));
+  }
+  if (key === ')') {
+    const open = text.split('(').length > text.split(')').length;
+    return result(open && /[\d.)%]$/.test(text) ? text + key : text);
+  }
+  if (key === '%') return result(/[\d.)]$/.test(text) ? text + key : text);
+  if (key === '-' && (!text || /[(*/^]$/.test(text))) return result(text + key);
+  if (done && key === '^' && text.startsWith('-')) text = `(${text})`;
+  const base = text.replace(/[+*/^-]+$/, '');
+  return result(!base || base.endsWith('(') ? text : base + key);
+}
+</script>
+
+<script>
+const $ = id => document.getElementById(id);
+const pretty = text => text.replace(/\*/g, '×').replace(/\//g, '÷').replace(/-/g, '−');
+const STORE = 'calculator-history';
+let state = { text: '', done: false };
+let saved = [];
+try { saved = JSON.parse(localStorage.getItem(STORE)) || []; } catch {}
+
+function render(error = '') {
+  $('expr').textContent = pretty(state.text) || '0';
+  $('expr').scrollLeft = $('expr').scrollWidth;
+  let hint = error;
+  if (!error && !state.done) {
+    try {
+      const value = calculate(state.text);
+      if (value !== state.text) hint = '= ' + pretty(value);
+    } catch {} // The expression is still being typed
+  }
+  $('preview').textContent = hint;
+  $('preview').dir = error ? 'rtl' : 'ltr';
+}
+
+function renderHistory() {
+  $('history').replaceChildren(...saved.map(({ text, value }) => {
+    const item = document.createElement('li');
+    const button = document.createElement('button');
+    button.textContent = `${pretty(text)} = ${pretty(value)}`;
+    button.onclick = () => { state = { text: value, done: true }; button.blur(); render(); };
+    item.append(button);
+    return item;
+  }));
+  if (!saved.length) $('history').innerHTML = '<li class="empty">עדיין אין חישובים</li>';
+  try { localStorage.setItem(STORE, JSON.stringify(saved)); } catch {}
+}
+
+function run(key) {
+  if (key !== '=') {
+    state = press(state, key);
+    return render();
+  }
+  if (!state.text || state.done) return;
+  try {
+    const value = calculate(state.text);
+    saved = [{ text: state.text, value }, ...saved].slice(0, 50);
+    state = { text: value, done: true };
+    render();
+    renderHistory();
+  } catch (error) { render(error.message); }
+}
+
+const names = { C:'ניקוי', back:'מחיקה', sign:'החלפת סימן', '^':'חזקה', '/':'חילוק', '*':'כפל', '-':'חיסור', '+':'חיבור', '%':'אחוז', '=':'שווה' };
+const labels = { back:'⌫', sign:'±', '^':'xʸ', '/':'÷', '*':'×', '-':'−' };
+for (const key of 'C back ( ) sign % ^ / 7 8 9 * 4 5 6 - 1 2 3 + 0 . ='.split(' ')) {
+  const button = document.createElement('button');
+  button.textContent = labels[key] || key;
+  if (names[key]) button.setAttribute('aria-label', names[key]);
+  button.className = key === '=' ? 'equal' : /^[\d.]$/.test(key) ? '' : 'op';
+  if (key === '=') button.style.gridColumn = 'span 2';
+  button.onclick = event => { run(key); if (event.detail) button.blur(); };
+  $('keys').append(button);
+}
+
+$('clear').onclick = event => { saved = []; renderHistory(); event.currentTarget.blur(); };
+document.addEventListener('keydown', event => {
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  if (event.key === 'Enter' && event.target.closest('button')) return;
+  const key = { Enter:'=', Backspace:'back', Escape:'C', Delete:'C', ',':'.' }[event.key] || event.key;
+  if (!/^([\d.+*/^%()=C-]|back)$/.test(key)) return;
+  event.preventDefault();
+  run(key);
+});
+
+render();
+renderHistory();
+</script>
+</body>
+</html>

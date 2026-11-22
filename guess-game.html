@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>יריד הניחושים</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 16px;
+    background: #24105c; color: #2b1456; font-family: "Segoe UI", Arial, sans-serif;
+  }
+  .scene { position: fixed; inset: 0; width: 100%; height: 100%; }
+  .game {
+    --mood: #7b3fe4; --ink: #fff;
+    position: relative; width: 100%; max-width: 440px; padding: 16px 24px 20px;
+    text-align: center; background: #fff6df; border: 6px solid #ffc933; border-radius: 32px;
+  }
+  h1 { margin: 0; font-size: 38px; line-height: 1.2; color: #d81b78; }
+  p { margin: 6px 0; }
+  .ball {
+    width: 128px; height: 128px; margin: 12px auto 0; border-radius: 50%;
+    display: grid; place-items: center; color: var(--ink); font: bold 54px "Segoe UI", Arial;
+    background: radial-gradient(circle at 32% 25%, #fff9 0 7%, transparent 30%), var(--mood);
+    box-shadow: inset -10px -14px 22px #0003, 0 0 22px var(--mood);
+  }
+  .stand { width: 104px; height: 18px; margin: -5px auto 10px; background: #2b1456; border-radius: 4px 4px 16px 16px; }
+  .feedback {
+    min-height: 54px; padding: 8px; border-radius: 14px; background: var(--mood); color: var(--ink);
+    font-size: 26px; font-weight: 700; display: grid; place-items: center;
+  }
+  .game[data-state="too-high"] { --mood: #d7263d; }
+  .game[data-state="high"]     { --mood: #ff9f1c; --ink: #2b1456; }
+  .game[data-state="low"]      { --mood: #43c6db; --ink: #2b1456; }
+  .game[data-state="too-low"]  { --mood: #2454d6; }
+  .game[data-state="win"]      { --mood: #16804b; }
+  .detail { min-height: 24px; }
+  form { display: flex; gap: 10px; margin: 8px 0; }
+  input, button { font: inherit; font-size: 21px; border-radius: 14px; padding: 10px 16px; }
+  input { flex: 1; min-width: 0; border: 3px solid #7b3fe4; text-align: center; }
+  button { border: 0; cursor: pointer; font-weight: 700; }
+  button:hover { filter: brightness(1.1); }
+  :disabled { opacity: .45; cursor: default; }
+  :focus-visible { outline: 3px solid #2b1456; outline-offset: 2px; }
+  #submit { background: #d81b78; color: #fff; }
+  #restart { width: 100%; background: #ffc933; color: #2b1456; }
+  .counter { font-size: 20px; }
+  .counter strong { font-size: 28px; color: #d81b78; }
+  .history { min-height: 30px; margin: 6px 0 10px; padding: 0; list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; }
+  .history li { padding: 2px 10px; border-radius: 12px; background: #eaddfb; font-weight: 700; }
+  .confetti { position: fixed; top: -20px; width: 10px; height: 16px; pointer-events: none; animation: fall 3s linear forwards; }
+  @keyframes fall { to { transform: translateY(110vh) rotate(720deg); } }
+  @media (prefers-reduced-motion: reduce) { .confetti { display: none; } }
+  .band { display: none; }
+  /* בטלפון הציור עובר לשתי רצועות, מעל הכרטיס ומתחתיו */
+  @media (max-width: 600px) {
+    body { display: flex; flex-direction: column; justify-content: center; padding: 6px 16px; gap: 4px; min-height: 100dvh; }
+    .wide { display: none; }
+    .band { display: block; position: relative; width: 100%; min-height: 48px; max-height: 170px; flex: 1 1 0; }
+    .game { flex-shrink: 0; }
+  }
+  @media (max-width: 600px) and (max-height: 760px) {
+    .ball { width: 76px; height: 76px; margin-top: 4px; font-size: 34px; }
+    .stand { width: 66px; height: 12px; margin-bottom: 6px; }
+    .game .feedback { min-height: 44px; padding: 3px; }
+    .game input, .game button { padding-top: 6px; padding-bottom: 6px; }
+    .game .history { margin: 2px 0 6px; }
+  }
+  @media (max-width: 420px) {
+    .game { padding: 12px 14px 16px; }
+    h1 { font-size: 31px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ציור הרקע -->
+<svg class="scene" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true" direction="ltr">
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1">
+      <stop offset="0" stop-color="#170b45"/><stop offset=".5" stop-color="#6424a6"/><stop offset="1" stop-color="#f75590"/>
+    </linearGradient>
+    <pattern id="stars" width="230" height="190" patternUnits="userSpaceOnUse">
+      <g fill="#fff3b0"><circle cx="20" cy="30" r="3"/><circle cx="140" cy="70" r="2"/><circle cx="75" cy="150" r="1.5"/><circle cx="205" cy="125" r="3"/></g>
+    </pattern>
+    <pattern id="stripes" width="64" height="20" patternUnits="userSpaceOnUse">
+      <path fill="#ff4f79" d="M0 0h64v20H0z"/><path fill="#ffe6a3" d="M0 0h32v20H0z"/>
+    </pattern>
+    <g id="balloon">
+      <path d="M0 100C-25 72-78 48-78-10a78 78 0 0 1 156 0C78 48 25 72 0 100"/>
+      <path fill="#fff" opacity=".25" d="M0 100C-30 45-40-45 0-88C40-45 30 45 0 100"/>
+      <path fill="none" stroke="#ffe6a3" stroke-width="3" d="M-16 88v42M16 88v42"/>
+      <path fill="#8a4b24" d="M-25 126h50l-7 32h-36z"/>
+    </g>
+    <g id="tent">
+      <path fill="url(#stripes)" d="M-140 0H140V190H-140z"/>
+      <path fill="#ffc933" d="M0-135L170 12H-170z"/>
+      <path fill="#2b1456" d="M-48 190V95Q0 20 48 95v95z"/>
+      <path fill="none" stroke="#ffe6a3" stroke-width="5" d="M0-135v-55"/>
+      <path fill="#43c6db" d="M0-190l55 18L0-154z"/>
+    </g>
+  </defs>
+  <path fill="url(#sky)" d="M0 0h1440v900H0z"/>
+  <path fill="url(#stars)" d="M0 0h1440v560H0z"/>
+  <circle cx="1030" cy="115" r="62" fill="#ffe6a3"/>
+  <path fill="#48207f" d="M0 690Q220 490 440 680Q720 470 980 690Q1220 510 1440 660V900H0z"/>
+  <use class="wide" href="#tent" x="1225" y="635"/>
+  <use class="wide" href="#tent" x="215" y="635"/>
+  <path fill="#24105c" d="M0 820Q360 735 720 825T1440 805V900H0z"/>
+  <g class="wide">
+  <use href="#balloon" x="170" y="165" fill="#19b5b0"/>
+  <use href="#balloon" x="1280" y="200" fill="#f58a1f"/>
+  <use href="#balloon" transform="translate(405 300) scale(.65)" fill="#d81b78"/>
+  <use href="#balloon" transform="translate(1070 355) scale(.6)" fill="#2454d6"/>
+  <g fill="#fff" text-anchor="middle" font-family="Arial" font-weight="bold" font-size="54">
+    <text x="170" y="180">7</text><text x="1280" y="215">100</text>
+    <text x="405" y="310" font-size="40">?</text><text x="1070" y="364" font-size="36">42</text>
+  </g>
+  </g>
+</svg>
+
+<svg class="band" viewBox="0 0 360 126" aria-hidden="true" direction="ltr">
+  <use href="#balloon" transform="translate(48 45) scale(.48)" fill="#19b5b0"/>
+  <use href="#balloon" transform="translate(134 55) scale(.36)" fill="#d81b78"/>
+  <use href="#balloon" transform="translate(222 55) scale(.36)" fill="#2454d6"/>
+  <use href="#balloon" transform="translate(310 45) scale(.48)" fill="#f58a1f"/>
+  <g fill="#fff" text-anchor="middle" font-family="Arial" font-weight="bold" font-size="24">
+    <text x="48" y="52">7</text><text x="134" y="61">?</text>
+    <text x="222" y="61">42</text><text x="310" y="52">100</text>
+  </g>
+</svg>
+
+<main class="game" id="game">
+  <h1>יריד הניחושים</h1>
+  <p>בחרתי מספר בין 1 ל־100. מה המספר?</p>
+  <div class="ball" id="ball" aria-hidden="true">?</div>
+  <div class="stand"></div>
+  <div role="status">
+    <div class="feedback" id="feedback" tabindex="-1"></div>
+    <p class="detail" id="detail"></p>
+  </div>
+  <form id="form" novalidate autocomplete="off">
+    <input id="guess" inputmode="numeric" aria-label="הניחוש שלך" placeholder="1 עד 100">
+    <button id="submit">ניחוש</button>
+  </form>
+  <p class="counter">ניסיונות: <strong id="count">0</strong></p>
+  <ul class="history" id="history" aria-label="ניחושים קודמים"></ul>
+  <button id="restart" type="button">משחק חדש</button>
+</main>
+
+<svg class="band" viewBox="0 0 360 126" aria-hidden="true">
+  <use href="#tent" transform="translate(62 64) scale(.32)"/>
+  <use href="#tent" transform="translate(180 72) scale(.28)"/>
+  <use href="#tent" transform="translate(298 64) scale(.32)"/>
+</svg>
+
+<script>
+  const MIN = 1;
+  const MAX = 100;
+  const CLOSE = 10; // עד מרחק כזה מוצג "גבוה" או "נמוך", בלי "מדי"
+
+  const $ = id => document.getElementById(id);
+  let secret;
+  let guesses;
+
+  function show(state, title, detail) {
+    $('game').dataset.state = state;
+    $('feedback').textContent = title;
+    $('detail').textContent = detail;
+  }
+
+  function newGame() {
+    secret = Math.floor(Math.random() * (MAX - MIN + 1)) + MIN;
+    guesses = new Set();
+    $('count').textContent = 0;
+    $('ball').textContent = '?';
+    $('history').replaceChildren();
+    document.querySelectorAll('.confetti').forEach(piece => piece.remove());
+    $('guess').disabled = $('submit').disabled = false;
+    $('guess').value = '';
+    show('ready', 'אפשר להתחיל!', 'הניחוש הראשון שלך');
+    $('guess').focus();
+  }
+
+  function celebrate() {
+    const colors = ['#ffc933', '#d81b78', '#43c6db', '#fff'];
+    for (let i = 0; i < 70; i++) {
+      const piece = document.createElement('i');
+      piece.className = 'confetti';
+      piece.style.left = `${Math.random() * 98}%`;
+      piece.style.background = colors[i % colors.length];
+      piece.style.animationDelay = `${Math.random()}s`;
+      piece.onanimationend = () => piece.remove();
+      document.body.append(piece);
+    }
+  }
+
+  function getHint(value) {
+    const close = Math.abs(value - secret) <= CLOSE;
+    if (value > secret) {
+      return close
+        ? ['high', '↓ גבוה', 'קרוב! צריך לרדת קצת']
+        : ['too-high', '↓ גבוה מדי', 'רחוק. צריך לרדת הרבה'];
+    }
+    return close
+      ? ['low', '↑ נמוך', 'קרוב! צריך לעלות קצת']
+      : ['too-low', '↑ נמוך מדי', 'רחוק. צריך לעלות הרבה'];
+  }
+
+  $('form').addEventListener('submit', event => {
+    event.preventDefault();
+    if ($('guess').disabled) return;
+
+    const text = $('guess').value.trim();
+    const value = Number(text);
+    $('guess').select();
+
+    // קלט שגוי וניחוש חוזר לא נספרים
+    if (!/^\d+$/.test(text) || value < MIN || value > MAX) {
+      $('detail').textContent = `יש להקליד מספר שלם בין ${MIN} ל־${MAX}`;
+      return;
+    }
+    if (guesses.has(value)) {
+      $('detail').textContent = `כבר ניחשת ${value}. הניסיון לא נספר`;
+      return;
+    }
+
+    guesses.add(value);
+    $('count').textContent = guesses.size;
+    $('ball').textContent = value;
+    const item = document.createElement('li');
+    item.textContent = value;
+    $('history').append(item);
+
+    if (value === secret) {
+      const total = guesses.size === 1 ? 'ניסיון אחד' : `${guesses.size} ניסיונות`;
+      show('win', 'בול! ניצחת!', `המספר הוא ${value}, הצלחת תוך ${total}`);
+      $('guess').disabled = $('submit').disabled = true;
+      $('feedback').focus(); // לא על הכפתור, כדי ש-Enter נוסף לא ימחק את התוצאה
+      celebrate();
+      return;
+    }
+
+    show(...getHint(value));
+    $('guess').value = '';
+    $('guess').focus();
+  });
+
+  $('restart').addEventListener('click', newGame);
+  newGame();
+</script>
+</body>
+</html>
