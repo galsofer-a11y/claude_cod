@@ -108,6 +108,8 @@ test('Netlify Blobs store: conditional writes, images and simultaneous answers',
   assert.equal(await store.writeGame({ ...game, n: 2 }, first.tag), true);
   assert.equal(await store.writeGame({ ...game, n: 3 }, first.tag), false, 'stale write is rejected');
   assert.equal((await store.readGame('ABCDEF')).game.n, 2);
+  assert.equal(await store.health(), 'ok');
+  assert.ok((await store.listGames()).every(g => /^[A-Z2-9]{6}$/.test(g.code)), 'health record is not listed as a game');
 
   await store.writeImage('ABCDEF', 'p1', Buffer.from([0xff, 0xd8, 0xff, 1]));
   assert.deepEqual([...await store.readImage('ABCDEF', 'p1')], [0xff, 0xd8, 0xff, 1]);
@@ -125,4 +127,13 @@ test('Netlify Blobs store: conditional writes, images and simultaneous answers',
 test('netlify.toml has the same security headers as the local server', () => {
   const toml = fs.readFileSync(new URL('../../netlify.toml', import.meta.url), 'utf8');
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) assert.ok(toml.includes(`${name} = ${JSON.stringify(value)}`), name);
+});
+
+test('health check reports settings without revealing values', async () => {
+  const dir = tmp();
+  const api = createHandler({ storage: fileStore(dir), env: { ADMIN_EMAIL: 'a@b.test', SESSION_SECRET: 'top-secret-value' } });
+  const res = await api.handle({ method: 'GET', path: '/api/health', headers: {}, body: Buffer.alloc(0), ip: '1' });
+  assert.ok(!res.body.includes('top-secret-value') && !res.body.includes('a@b.test'));
+  assert.deepEqual(JSON.parse(res.body), { settings: { ADMIN_EMAIL: true, SESSION_SECRET: true, GOOGLE_CLIENT_ID: false, SMTP_USER: false, SMTP_PASS: false }, storage: 'ok' });
+  fs.rmSync(dir, { recursive: true, force: true });
 });

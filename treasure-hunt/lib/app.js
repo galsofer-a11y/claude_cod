@@ -280,6 +280,17 @@ export function createHandler({ storage, env = {}, clock = Date.now, mailer = se
       const parts = req.path.replace(/^\/api\//, '').split('/').filter(Boolean).map(decodeURIComponent);
       let result;
       if (parts[0] === 'site') result = { googleClientId: googleReady ? env.GOOGLE_CLIENT_ID : null, localAdmin: localLogin, mail: !!smtp };
+      else if (parts[0] === 'health') {
+        // מראה אילו הגדרות קיימות, בלי לחשוף את הערכים שלהן
+        if (!auth.allow(`health:${req.ip}`, 6, 60_000)) fail('נסו שוב בעוד דקה', 429);
+        result = {
+          settings: {
+            ADMIN_EMAIL: !!adminEmail, SESSION_SECRET: !!env.SESSION_SECRET, GOOGLE_CLIENT_ID: !!env.GOOGLE_CLIENT_ID,
+            SMTP_USER: !!env.SMTP_USER, SMTP_PASS: !!env.SMTP_PASS,
+          },
+          storage: await storage.health().catch(error => `error: ${error.message.slice(0, 120)}`),
+        };
+      }
       else if (parts[0] === 'admin') result = await admin(req, parts.slice(1), out);
       else result = await player(req, parts);
       const headers = { ...API_HEADERS, ...(out.cookie && { 'Set-Cookie': out.cookie }) };

@@ -69,6 +69,9 @@ export function fileStore(dir) {
       fs.rmSync(path.join(dir, `${code}.json`), { force: true });
       fs.rmSync(imageDir(code), { recursive: true, force: true });
     },
+    async health() {
+      return 'ok';
+    },
     async readImage(code, pointId) {
       return fs.promises.readFile(imageFile(code, pointId)).catch(() => null);
     },

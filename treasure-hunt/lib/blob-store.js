@@ -15,6 +15,7 @@ export function blobStore(options = {}) {
   const images = getStore({ name: 'galmon-images', consistency: 'strong', ...options });
 
   async function keysOf(store, prefix) {
+    // רשומות פנימיות (כמו בדיקת התקינות) מתחילות בקו תחתון ואינן משחקים
     const { blobs } = await store.list(prefix ? { prefix } : {});
     return blobs.map(b => b.key);
   }
@@ -33,12 +34,23 @@ export function blobStore(options = {}) {
       return modified;
     },
     async listGames() {
-      const all = await Promise.all((await keysOf(games)).map(key => games.get(key, { type: 'json' })));
+      const keys = (await keysOf(games)).filter(key => CODE.test(key));
+      const all = await Promise.all(keys.map(key => games.get(key, { type: 'json' })));
       return all.filter(Boolean);
     },
     async deleteGame(code) {
       await games.delete(code);
       await Promise.all((await keysOf(images, `${code}/`)).map(key => images.delete(key)));
+    },
+    /** בודק שהאחסון מחזיר ETag ודוחה שמירה מיושנת, כלומר ששמירה בו-זמנית בטוחה */
+    async health() {
+      const key = '_health';
+      await games.setJSON(key, { at: Date.now() });
+      const first = await games.getWithMetadata(key, { type: 'json' });
+      if (!first?.etag) return 'no-etag';
+      const fresh = await games.setJSON(key, { at: Date.now(), n: 1 }, { onlyIfMatch: first.etag });
+      const stale = await games.setJSON(key, { at: Date.now(), n: 2 }, { onlyIfMatch: first.etag });
+      return fresh.modified && !stale.modified ? 'ok' : 'conditional-writes-not-enforced';
     },
     async readImage(code, pointId) {
       const data = await images.get(imageKey(code, pointId), { type: 'arrayBuffer' });
