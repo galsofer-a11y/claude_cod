@@ -1,0 +1,30 @@
+# הגדרות אירוח לאתר גלמון ב-Render. ערכים פרטיים (sync: false) ממלאים בלוח הבקרה של Render.
+services:
+  - type: web
+    name: galmon
+    runtime: node
+    rootDir: treasure-hunt
+    branch: galmon
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/site
+    disk:
+      name: galmon-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: HOST
+        value: 0.0.0.0
+      - key: DATA_DIR
+        value: /var/data
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
