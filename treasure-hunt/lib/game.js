@@ -119,8 +119,11 @@ export function requirePlayer(game, token) {
   return player;
 }
 
-export function checkAccess(game, access) {
-  check(same(String(access ?? '').trim(), game.access), 'הסיסמה למשחק שגויה', 403);
+export const accessOk = (game, access) => same(String(access ?? '').trim(), game.access);
+
+// בסיום המשחק לא שומרים יותר את מיקום המשתתפים
+function forgetPositions(game) {
+  for (const p of Object.values(game.players)) delete p.position;
 }
 
 function fresh(position, now) {
@@ -201,6 +204,7 @@ function finish(game, team, at, timedOut) {
   if (playing.length && playing.every(t => t.finishedAt)) {
     game.endedAt = Math.max(...playing.map(t => t.finishedAt));
     game.pendingMail = true;
+    forgetPositions(game);
   }
 }
 
@@ -246,6 +250,7 @@ export function endGame(game, now) {
   }
   game.endedAt = now;
   game.pendingMail = true;
+  forgetPositions(game);
 }
 
 /** מוחק שחקנים ותוצאות ומשאיר את המסלול, כדי לשחק שוב. */
@@ -300,10 +305,13 @@ export function seen(player, now) {
   player.seenAt = now;
 }
 
+/** מעדכן מיקום. מחזיר true אם השחקן זז מספיק כדי שכדאי לשמור */
 export function setPosition(player, fix, now) {
   const { lat, lng, accuracy, age = 0 } = fix ?? {};
-  if (![lat, lng, accuracy, age].every(Number.isFinite) || Math.abs(lat) > 90 || Math.abs(lng) > 180 || accuracy < 0) return;
-  player.position = { lat, lng, accuracy, time: now - Math.max(0, age) };
+  if (![lat, lng, accuracy, age].every(Number.isFinite) || Math.abs(lat) > 90 || Math.abs(lng) > 180 || accuracy < 0) return false;
+  const previous = player.position;
+  player.position = { lat: +lat.toFixed(6), lng: +lng.toFixed(6), accuracy: Math.round(accuracy), time: now - Math.min(Math.max(0, age), FRESH_MS * 3) };
+  return !previous || distance(previous, player.position) >= 3 || Math.abs(previous.accuracy - player.position.accuracy) > 10;
 }
 
 export function startTeam(game, player, now) {

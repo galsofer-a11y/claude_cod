@@ -7,7 +7,7 @@ import { resultsTable } from './results.js';
 import { accessKey, enterGame } from './gate.js';
 import { chime, unlockSound } from './sound.js';
 
-const POLL_MS = 3000;
+const POLL_MS = 5000; // מאוזן בין עדכון מהיר לבין מכסת השימוש של השרת
 const GPS_REFRESH_MS = 8000;
 const TRAIL_STEP_M = 4;
 const TRAIL_MAX_POINTS = 4000;
@@ -26,7 +26,9 @@ export function player(root, code) {
 
   const $ = selector => root.querySelector(selector);
   const serverNow = () => Date.now() + clockOffset;
-  const call = (path = '', body = {}) => api(`/games/${code}/me${path}`, { method: 'POST', token, body });
+  // כל פעולה שולחת גם את המיקום, כדי שהשרת יבדוק את המרחק מהנקודה בזמן אמת
+  const position = () => fix && { lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy, age: Date.now() - fix.at };
+  const call = (path = '', body = {}) => api(`/games/${code}/me${path}`, { method: 'POST', token, body: { position: position(), ...body } });
   const unlock = () => unlockSound();
   document.addEventListener('pointerdown', unlock);
 
@@ -254,9 +256,8 @@ export function player(root, code) {
       syncAgain = false;
       const sent = generation;
       if (demo && fix) fix.at = Date.now();
-      const position = fix && { lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy, age: Date.now() - fix.at };
       try {
-        const data = await call('', { position });
+        const data = await call();
         if (dead) return;
         if (sent === generation) receive(data);
         const offline = root.querySelector('#offline');
@@ -592,7 +593,7 @@ export function player(root, code) {
 
   async function loadImage(el, data) {
     try {
-      const blob = await api(`/games/${code}/me/image?v=${encodeURIComponent(data.image)}`, { token, blob: true });
+      const blob = await api(`/games/${code}/me/image`, { method: 'POST', token, body: { position: position() }, blob: true });
       if (!box || box.el !== el) return;
       box.url = URL.createObjectURL(blob);
       el.querySelector('.riddle-image').innerHTML = `<img src="${box.url}" alt="${esc(data.imageAlt)}">`;

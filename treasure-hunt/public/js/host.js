@@ -6,7 +6,7 @@ import { requireAdmin } from './gate.js';
 import { deleteGame, resetGame } from './admin.js';
 
 const SAVE_DELAY = 700;
-const POLL_MS = 3000;
+const POLL_MS = 5000;
 const PLACE_ZOOM = 14; // מרחוק אי אפשר לסמן נקודה במדויק
 const IMAGE_SIZE = 1600;
 

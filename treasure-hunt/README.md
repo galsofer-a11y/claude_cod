@@ -23,46 +23,54 @@
 במחשב המקומי יש כפתור **כניסת מנהל מקומית**, שמופיע רק כשלא הוגדר Google ורק בכתובת localhost.
 כדי לשחק מהמחשב, סמנו בעורך **מצב תרגול**, וכך לחיצה על המפה מזיזה את השחקן.
 
-## הגדרות לפני העלאה לאינטרנט
+## העלאה ל-Netlify
 
-ההגדרות נקבעות במשתני סביבה אצל ספק האירוח.
+האתר מוכן ל-Netlify. ההגדרות נמצאות בקובץ `netlify.toml` שבתיקייה הראשית של המאגר.
+- **הדפים** מוגשים מהתיקייה `public`.
+- **הפעולות** רצות כ-Netlify Functions, דרך `netlify/functions/api.mjs`.
+- **המשחקים והתמונות** נשמרים ב-Netlify Blobs. אין צורך בחשבון אחסון נוסף.
+- **בדיקה מתוזמנת** רצה כל 5 דקות, מסיימת קבוצות שעברו 90 דקות ושולחת את מיילי הסיכום.
+
+### חיבור האתר
+1. ב-Netlify בוחרים **Add new project ← Import an existing project ← GitHub**.
+2. בוחרים את המאגר ואת הענף `galmon`. שאר ההגדרות נקראות מ-`netlify.toml`.
+3. ב-**Project configuration ← Environment variables** מוסיפים את המשתנים שבטבלה, ואז מפעילים deploy מחדש.
 
 | משתנה | מה לשים |
 |---|---|
-| `HOST` | `0.0.0.0` |
-| `DATA_DIR` | נתיב בדיסק קבוע, למשל `/var/data` |
+| `ADMIN_EMAIL` | כתובת חשבון ה-Google של המנהל |
+| `SESSION_SECRET` | מחרוזת אקראית ארוכה, לפחות 32 תווים, לחתימת ההתחברות של המנהל |
 | `GOOGLE_CLIENT_ID` | מזהה הלקוח מ-Google (ראו בהמשך) |
-| `ADMIN_EMAIL` | כתובת חשבון ה-Google של המנהל. חובה לכניסה עם Google |
 | `SMTP_USER` | כתובת ה-Gmail שממנה יישלחו המיילים |
 | `SMTP_PASS` | סיסמת אפליקציה של אותו חשבון Gmail |
 | `MAIL_TO` | לאן לשלוח את הסיכום. ברירת המחדל: `ADMIN_EMAIL` |
-| `TRUST_PROXY` | `1` אם האתר נמצא מאחורי שרת proxy. ב-Render זה מוגדר לבד |
+
+כניסת המנהל עובדת רק כש-`ADMIN_EMAIL`, `SESSION_SECRET` ו-`GOOGLE_CLIENT_ID` מוגדרים שלושתם.
 
 ### כניסת מנהל עם Google
 1. ב-[Google Cloud Console](https://console.cloud.google.com/apis/credentials) יוצרים OAuth client ID מסוג Web application.
-2. ב-Authorized JavaScript origins מוסיפים את כתובת האתר, למשל `https://galmon.example.com`. לבדיקה במחשב מוסיפים גם `http://localhost:3000`.
+2. ב-Authorized JavaScript origins מוסיפים את כתובת האתר ב-Netlify, למשל `https://galmon.netlify.app`.
 3. מעתיקים את ה-Client ID למשתנה `GOOGLE_CLIENT_ID`.
-
-רק החשבון שב-`ADMIN_EMAIL` יכול להיכנס כמנהל.
 
 ### מייל סיכום דרך Gmail
 1. בחשבון Google מפעילים אימות דו-שלבי.
 2. ב-[סיסמאות לאפליקציות](https://myaccount.google.com/apppasswords) יוצרים סיסמה חדשה.
-3. מגדירים את `SMTP_USER` ואת `SMTP_PASS`. הסיסמה לא נשמרת בקוד.
+3. מכניסים אותה ל-`SMTP_PASS`. הסיסמה לא נשמרת בקוד.
 
-אם לא מגדירים מייל, המשחק עובד כרגיל, ובניהול מופיעה הודעה שהמייל לא נשלח.
+### שימוש ומכסות
+כל טלפון במשחק פונה לשרת כל 5 שניות, ושומר מיקום לכל היותר פעם ב-10 שניות או כשזז.
+בתוכנית החינמית של Netlify יש מכסה חודשית של קרדיטים. במשחקים גדולים או רבים, בדקו את צריכת השימוש בלוח הבקרה של Netlify.
 
-### אירוח
-צריך שרת Node.js 20 ומעלה עם כתובת **HTTPS**, כי טלפונים משתפים מיקום רק באתר מאובטח.
-לדוגמה ב-Render: Web Service עם תיקיית שורש `treasure-hunt`, פקודת הפעלה `npm start`, Persistent Disk ומשתני הסביבה שבטבלה.
-המשחקים והתמונות נשמרים ב-`DATA_DIR`, ולכן בלי דיסק קבוע הם נמחקים כשהשרת מופעל מחדש. הריצו מופע אחד בלבד.
+### הרצה במחשב
+`start.bat` או `npm start` מריצים את אותו אתר במחשב, והנתונים נשמרים בתיקייה `data`.
+לבדיקות: `npm install` ואז `npm test`.
 
 ## נגישות ופרטיות
 
 - באתר יש תפריט נגישות, הצהרת נגישות (`#/accessibility`) ודף פרטיות ו-cookies (`#/privacy`).
 - **לפני פרסום** יש למלא בקובץ `public/js/site-info.js` את שם מפעיל האתר ואת פרטי רכז/ת הנגישות. החוק מחייב פרטי קשר בהצהרה.
 - ההצהרה מתארת את ההתאמות שנבנו. כדי להצהיר על עמידה מלאה בת"י 5568, מומלץ לבצע בדיקה של מורשה נגישות.
-- מיקומי השחקנים נשמרים בזיכרון בלבד. שמות, תשובות וזמנים נשמרים עד שהמשחק נמחק.
+- בשרת נשמר רק המיקום האחרון של כל שחקן, והוא נמחק בסיום המשחק. שמות, תשובות וזמנים נשמרים עד שהמשחק נמחק.
 
 ## לפני שיוצאים לשטח
 
@@ -76,6 +84,3 @@
 - מפות: [Israel Hiking Map](https://israelhiking.osm.org.il), [OpenTopoMap](https://opentopomap.org), [Waymarked Trails](https://hiking.waymarkedtrails.org), [OpenStreetMap](https://www.openstreetmap.org/copyright). השרתים האלה מיועדים לשימוש מתון. Israel Hiking Map מוגבלת לשימוש לא מסחרי, ולכן לפני שימוש מסחרי צריך לקבל אישור.
 - תמונות רקע: [Unsplash](https://unsplash.com/license). ספריית מפה: [Leaflet](https://leafletjs.com).
 
-## בדיקות
-
-`npm test`
