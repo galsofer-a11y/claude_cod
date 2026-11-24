@@ -630,10 +630,16 @@ export function player(root, code) {
     let html;
     if (view.stage === 'task') {
       html = `<div class="success"><b>החידה נפתרה!</b> מצאו את המעטפה לפי הרמז, הציגו אותה למדריך ובצעו את המשימה שהוא יסביר.
-        בסיום המדריך יקליד כאן את קוד הנקודה.</div>
+        בסיום המדריך יבחר כאן ציון למשימה ויקליד את קוד הנקודה.</div>
         <form class="code-form">
+          <fieldset class="task-score">
+            <legend>ציון המשימה, למילוי המדריך</legend>
+            <p class="small">הציון מורכב מעבודת צוות, עמידה בזמנים ועידוד הדדי. 1 הוא הנמוך ו-${view.scoring.taskMax} הגבוה.</p>
+            <div class="score-options">${Array.from({ length: view.scoring.taskMax }, (_, i) => `
+              <label><input type="radio" name="score" value="${i + 1}" required><span>${i + 1}</span></label>`).join('')}</div>
+          </fieldset>
           <label>קוד המדריך<input name="code" class="code" inputmode="numeric" autocomplete="off" maxlength="8" required></label>
-          <button class="btn sun">אישור המשימה</button>
+          <button class="btn sun">אישור המשימה והציון</button>
         </form>`;
     } else if (view.wait) {
       html = `<div class="waiting"><b id="box-countdown">${clock(view.wait.remaining)}</b><span>תשובה שגויה. כל הקבוצה ממתינה במקום לפני ניסיון נוסף.</span></div>`;
@@ -695,7 +701,8 @@ export function player(root, code) {
     button.disabled = true;
     generation++;
     try {
-      const { view: next } = await call('/code', { code: new FormData(form).get('code') });
+      const data = new FormData(form);
+      const { view: next } = await call('/code', { code: data.get('code'), score: Number(data.get('score')) });
       generation++;
       if (!dead) receive(next);
     } catch (error) {
@@ -732,15 +739,16 @@ export function player(root, code) {
     $('#results-summary').textContent = mine?.finished ? `${view.team.name} מצאו את כל המעטפות!`
       : view.timedOut ? `${view.team.name}: נגמרו 90 הדקות` : `${view.team.name}: המשחק הסתיים`;
     put($('#summary-cards'), mine ? `
+      <div class="card score-card"><span>ניקוד כולל</span><b>${mine.score}</b><small>חידות ${mine.riddlePoints} · משימות ${mine.taskPoints} · זמן ${mine.timeBonus}</small></div>
       <div class="card"><span>זמן סופי</span><b>${clock(view.startedAt ? time : 0)}</b></div>
       <div class="card"><span>נקודות שהושלמו</span><b>${mine.done} מתוך ${mine.total}</b></div>
       <div class="card"><span>חידות שנפתרו</span><b>${mine.riddles}</b></div>
       <div class="card"><span>מקום</span><b>${mine.rank} מתוך ${view.results.length}</b></div>
-      <div class="card wide"><span>החידות שפתרתם</span>
-        <ul>${mine.details.map(d => `<li>${d.riddle ? '✓' : '✗'} נקודה ${d.number}${d.name ? `, ${esc(d.name)}` : ''}${d.question ? `: ${esc(d.question)}` : ''}</li>`).join('')}</ul></div>`
+      <div class="card wide"><span>החידות שפתרתם וציוני המשימות</span>
+        <ul>${mine.details.map(d => `<li>${d.riddle ? '✓' : '✗'} נקודה ${d.number}${d.name ? `, ${esc(d.name)}` : ''}${d.question ? `: ${esc(d.question)}` : ''}${d.taskScore ? ` (ציון משימה ${d.taskScore})` : ''}</li>`).join('')}</ul></div>`
       : '<p>הקבוצה שלך לא התחילה לשחק.</p>');
     $('#results-title').textContent = ended ? 'הדירוג הסופי' : 'דירוג זמני, עד שכל הקבוצות יסיימו';
-    put($('#results'), resultsTable(view.results, { highlight: view.team.id }));
+    put($('#results'), resultsTable(view.results, { highlight: view.team.id, scoring: view.scoring }));
     if (ended) stopTracking();
   }
 

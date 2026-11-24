@@ -228,7 +228,7 @@ html.a11y-still *, html.a11y-still *::before { animation: none !important; trans
 .results-hero p { display: inline-block; padding: 6px 14px; margin: 0; background: var(--pine); font-weight: 700; }
 .results { max-width: 1000px; margin: auto; padding: 22px 16px 90px; }
 .results:focus { outline: none; }
-.summary-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 26px; }
+.summary-cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 26px; }
 .card { padding: 14px; background: #fff; border-radius: 10px; border: 1px solid var(--line); }
 .card span { display: block; color: var(--muted); font-size: .85em; font-weight: 700; }
 .card b { font: 700 2.4em/1.1 var(--display); }
@@ -303,3 +303,23 @@ html.a11y-still *, html.a11y-still *::before { animation: none !important; trans
   .host, .host > .side { display: block; height: auto; overflow: visible; }
   .codes { border: 0; }
 }
+
+/* ציון המדריך למשימה */
+.task-score { flex-basis: 100%; margin: 0; padding: 10px 12px; border: 2px solid var(--sun); border-radius: 8px; background: #fffbea; }
+.task-score legend { font-weight: 800; padding: 0 6px; }
+.task-score p { margin-bottom: 8px; }
+.score-options { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.score-options label { margin: 0; }
+.score-options input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.score-options span { display: grid; place-items: center; min-height: 44px; border: 2px solid var(--line); border-radius: 8px; background: #fff; font-weight: 800; font-size: 1.15em; cursor: pointer; }
+.score-options input:checked + span { background: var(--pine); border-color: var(--pine); color: #fff; }
+.score-options input:focus-visible + span { outline: 3px solid #1769c2; outline-offset: 2px; }
+.board .score-total b { font: 700 2.2em/1 var(--display); color: var(--pine); }
+.board .score-total small { display: block; }
+.scoring-rules { margin: 6px 0 0; padding-inline-start: 18px; }
+.score-card { background: var(--pine); color: #fff; border-color: var(--pine); }
+.score-card span, .score-card small { color: #dce7d5; }
+.score-card b { color: var(--sun); }
+.score-card small { display: block; font-size: .8em; }
+@media (max-width: 760px) { .score-card { grid-column: 1 / -1; } }
+.board tr { grid-template-columns: 54px repeat(5, 1fr); }

@@ -20,20 +20,25 @@ export function summaryMail(game, rows) {
   const table = rows.map(r => `<tr>
     <td style="${cell};font-weight:700">${r.rank}</td>
     <td style="${cell}"><b style="color:${esc(r.color)}">■</b> ${esc(r.name)}<br><small>${r.players.map(esc).join(', ')}</small></td>
+    <td style="${cell};font-weight:700;font-size:18px">${r.score}</td>
     <td style="${cell}">${r.done} / ${r.total}</td>
     <td style="${cell}">${clock(r.time)}${r.timedOut ? ' (נגמר הזמן)' : r.finished ? '' : ' (לא סיימה)'}</td>
+    <td style="${cell}">${r.riddlePoints} / ${r.taskPoints} / ${r.timeBonus}</td>
+    <td style="${cell}">${r.taskAverage ?? '–'}</td>
     <td style="${cell}">${r.riddles}</td><td style="${cell}">${r.wrong}</td></tr>`).join('');
   const details = rows.map(r => `<h3 style="margin:18px 0 6px">${esc(r.name)}</h3><ol style="margin:0;padding-right:20px">${
     r.details.map(d => `<li>${esc(d.name || `נקודה ${d.number}`)}: ${d.riddle ? 'חידה נפתרה' : 'חידה לא נפתרה'}, ${
-      d.task ? 'משימה הושלמה' : d.skipped ? 'דילוג של המנהל' : 'משימה לא הושלמה'}</li>`).join('')}</ol>`).join('');
+      d.task ? `משימה הושלמה, ציון ${d.taskScore ?? '–'}` : d.skipped ? 'דילוג של המנהל' : 'משימה לא הושלמה'}</li>`).join('')}</ol>`).join('');
   return {
     subject: `גלמון: סיכום המשחק "${game.config.title}"`,
     html: `<!doctype html><html lang="he" dir="rtl"><body style="font-family:Arial,sans-serif;color:#172620">
       <h1 style="color:#12362a">סיכום משחק: ${esc(game.config.title)}</h1>
       <p>קוד משחק ${esc(game.code)}. ${rows.length ? `השתתפו ${rows.length} קבוצות.` : 'אף קבוצה לא התחילה לשחק.'}</p>
       ${rows.length ? `<table style="border-collapse:collapse;width:100%"><tr style="background:#12362a;color:#fff">
-        <th style="${cell}">מקום</th><th style="${cell}">קבוצה</th><th style="${cell}">נקודות</th>
-        <th style="${cell}">זמן</th><th style="${cell}">חידות</th><th style="${cell}">טעויות</th></tr>${table}</table>${details}` : ''}
+        <th style="${cell}">מקום</th><th style="${cell}">קבוצה</th><th style="${cell}">ניקוד</th><th style="${cell}">נקודות</th>
+        <th style="${cell}">זמן</th><th style="${cell}">חידות / משימות / זמן</th><th style="${cell}">ציון משימות ממוצע</th>
+        <th style="${cell}">חידות</th><th style="${cell}">טעויות</th></tr>${table}</table>
+      <p style="font-size:13px;color:#52655b">הניקוד: 100 לכל חידה שנפתרה פחות 20 על כל טעות (לפחות 40), ציון המדריך למשימה כפול 10, ו-2 נקודות לכל דקה שנשארה למי שסיים את המסלול.</p>${details}` : ''}
       <p style="color:#52655b;font-size:12px">נשלח אוטומטית מאתר גלמון.</p></body></html>`,
   };
 }

@@ -514,10 +514,10 @@ export function host(root, code) {
         <h2>הקבוצות</h2>
         <ul class="team-list">${teams.map(teamLine).join('')}</ul>
         <p class="small muted">דילוג מיועד לתקלה, למשל נקודה חסומה. הוא לא נחשב נקודה שהושלמה בדירוג.</p>
-        ${results.length ? `<h2>דירוג ביניים</h2>${resultsTable(results)}` : ''}
+        ${results.length ? `<h2>דירוג ביניים</h2>${resultsTable(results, { scoring: view.scoring })}` : ''}
         <button class="btn danger wide" data-do="end" style="margin-top:20px" ${joined ? '' : 'disabled'}>סיום המשחק לכולם</button>`;
     } else {
-      html += `<h2>הדירוג הסופי</h2>${resultsTable(results)}${mailLine()}
+      html += `<h2>הדירוג הסופי</h2>${resultsTable(results, { scoring: view.scoring })}${mailLine()}
         <button class="btn primary wide" data-do="copy" style="margin-top:20px">משחק חדש עם אותו מסלול</button>`;
     }
     html += `${codesBlock()}

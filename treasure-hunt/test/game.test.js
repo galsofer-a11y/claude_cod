@@ -31,9 +31,9 @@ function vote(game, player, i, now, right = true) {
   return g.answer(game, player, { id: q.id, choice: q.options.findIndex(o => (o === `ok${i}`) === right) }, now);
 }
 
-function clear(game, players, i, now) {
+function clear(game, players, i, now, score = 7) {
   for (const p of players) vote(game, p, i, now);
-  g.submitCode(game, players[0], { code: `${7350 + i}` }, now);
+  g.submitCode(game, players[0], { code: `${7350 + i}`, score }, now);
 }
 
 test('four distinct team names and colors, 6 digit password', () => {
@@ -141,10 +141,11 @@ test('only the instructor code completes a point, with a try limit', () => {
   const { game, players: [p] } = setup();
   assert.throws(() => g.submitCode(game, p, { code: '7350' }, 2000));
   vote(game, p, 0, 2000);
-  for (let i = 0; i < 5; i++) assert.throws(() => g.submitCode(game, p, { code: '9999' }, 2000 + i), /שגוי/);
-  assert.throws(() => g.submitCode(game, p, { code: '7350' }, 3000), /ניסיונות/);
+  assert.throws(() => g.submitCode(game, p, { code: '7350' }, 2000), /ציון/, 'the instructor must give a score');
+  for (let i = 0; i < 5; i++) assert.throws(() => g.submitCode(game, p, { code: '9999', score: 5 }, 2000 + i), /שגוי/);
+  assert.throws(() => g.submitCode(game, p, { code: '7350', score: 5 }, 3000), /ניסיונות/);
   at(game, p, 0, 123_000);
-  g.submitCode(game, p, { code: '7350' }, 123_000);
+  g.submitCode(game, p, { code: '7350', score: 5 }, 123_000);
   assert.equal(game.teams[0].step, 1);
   const view = g.playerView(game, p, 130_000);
   assert.deepEqual(view.route.map(r => r.state), ['done', 'current']);
@@ -171,13 +172,33 @@ test('team stops after 90 minutes and game ends when all are done', () => {
   assert.ok(g.playerView(game, b, game.endedAt).results);
 });
 
-test('ranking: more points first, then faster time', () => {
+test('ranking: total score, then faster time', () => {
   const { game, players: [a, b, c] } = setup(2, [0, 1, 2]);
   clear(game, [a], 0, 2000); clear(game, [a], 1, 9000);
   clear(game, [b], 0, 3000); clear(game, [b], 1, 4000);
   clear(game, [c], 0, 2500);
   g.endGame(game, 10000);
   assert.deepEqual(g.standings(game, 10000).map(r => r.id), [1, 0, 2]);
+});
+
+test('score combines riddles, wrong answers, instructor scores and time', () => {
+  const { game, players: [a, b] } = setup(2, [0, 1]);
+  // קבוצה 0: טעות אחת בחידה 1, ציונים 9 ו-6, מסיימת אחרי 30 דקות
+  vote(game, a, 0, 2000, false);
+  for (let t = 5000; t <= 125_000; t += 5000) { at(game, a, 0, t); g.tick(game, t); }
+  vote(game, a, 0, 125_000);
+  g.submitCode(game, a, { code: '7350', score: 9 }, 125_000);
+  vote(game, a, 1, 126_000);
+  at(game, a, 1, 1000 + 30 * 60_000);
+  g.submitCode(game, a, { code: '7351', score: 6 }, 1000 + 30 * 60_000);
+  // קבוצה 1: שתי חידות בלי טעויות, ציונים 3 ו-3, נגמר הזמן לפני המשימה השנייה
+  clear(game, [b], 0, 3000, 3);
+  vote(game, b, 1, 4000);
+  g.tick(game, 1000 + g.LIMIT_MS);
+  const [first, second] = g.standings(game, game.endedAt);
+  assert.deepEqual([first.id, first.riddlePoints, first.taskPoints, first.timeBonus, first.score], [0, 80 + 100, 150, 60 * 2, 450]);
+  assert.deepEqual([second.id, second.riddlePoints, second.taskPoints, second.timeBonus, second.score], [1, 200, 30, 0, 230]);
+  assert.equal(first.taskAverage, 7.5);
 });
 
 test('reset keeps the route and removes players', () => {
@@ -252,7 +273,7 @@ test('HTTP: passwords, admin, full point, image privacy, mail', async t => {
   const [, q] = await call(`/games/${code}/me/point`, { method: 'POST', token, body: here });
   assert.equal(q.hint, 'H0', JSON.stringify(q));
   await call(`/games/${code}/me/answer`, { method: 'POST', token, body: { ...here, id: q.id, choice: q.options.indexOf('ok0') } });
-  const [, done] = await call(`/games/${code}/me/code`, { method: 'POST', token, body: { ...here, code: '7350' } });
+  const [, done] = await call(`/games/${code}/me/code`, { method: 'POST', token, body: { ...here, code: '7350', score: 8 } });
   assert.equal(done.view.status, 'ended');
   await new Promise(r => setTimeout(r, 50));
   assert.equal(sent.length, 1);
@@ -260,6 +281,8 @@ test('HTTP: passwords, admin, full point, image privacy, mail', async t => {
   assert.ok(sent[0].html.includes('T'));
   assert.ok(!fs.readFileSync(path.join(dir, `${code}.json`), 'utf8').includes('"accuracy"'));
   assert.equal(done.view.results[0].done, 1);
+  assert.equal(done.view.results[0].taskPoints, 80);
+  assert.ok(sent[0].html.includes('ניקוד'));
 
   assert.equal((await call(`/admin/games/${code}/reset`, { method: 'POST' }))[0], 200);
   assert.equal((await call(`/games/${code}/me`, { method: 'POST', token }))[0], 401);

@@ -13,6 +13,16 @@ export const ACTIVE_MS = 45_000;
 const MAX_ACCURACY = 80;
 const PRESENCE_EXTRA = 25; // בזמן המתנה מאפשרים סטייה של GPS בלי לעצור את השעון
 const CODE_TRIES = 5;
+
+/** שיטת הניקוד. מוצגת גם לשחקנים ולמנהל, ולכן מוגדרת במקום אחד */
+export const SCORING = {
+  riddle: 100,        // חידה שנפתרה
+  wrongPenalty: 20,   // הורדה על כל תשובה שגויה באותה נקודה
+  riddleMin: 40,      // חידה שנפתרה שווה לפחות כך
+  taskMax: 10,        // ציון המדריך למשימה: 1 עד 10
+  taskFactor: 10,     // כל נקודת ציון שווה 10 נקודות
+  minuteBonus: 2,     // על כל דקה שנשארה מ-90, לקבוצה שסיימה את כל המסלול
+};
 const CODE_WINDOW_MS = 120_000;
 
 const COLORS = [
@@ -398,13 +408,15 @@ export function answer(game, player, input, now) {
 export function submitCode(game, player, input, now) {
   const { team, point } = atPoint(game, player, now);
   check(team.stage === 'task', 'קודם צריך לפתור את החידה', 409);
+  const score = Number(input.score);
+  check(Number.isInteger(score) && score >= 1 && score <= SCORING.taskMax, `המדריך צריך לבחור ציון למשימה בין 1 ל-${SCORING.taskMax}`);
   team.codeFails = team.codeFails.filter(t => now - t < CODE_WINDOW_MS);
   check(team.codeFails.length < CODE_TRIES, 'יותר מדי ניסיונות. המתינו שתי דקות ונסו שוב', 429);
   if (!same(String(input.code ?? '').trim(), point.code)) {
     team.codeFails.push(now);
     throw new GameError('הקוד שגוי. בקשו מהמדריך להקליד אותו שוב');
   }
-  team.log.push({ point: point.id, kind: 'task', time: now, players: [player.name] });
+  team.log.push({ point: point.id, kind: 'task', time: now, players: [player.name], score });
   advance(game, team, now);
 }
 
@@ -414,7 +426,20 @@ export function standings(game, now, detailsFor = () => true, reveal = true) {
   const rows = game.teams.filter(t => t.startedAt && members(game, t).length).map(team => {
     const of = kind => team.log.filter(l => l.kind === kind);
     const end = team.finishedAt ?? Math.min(now, team.startedAt + LIMIT_MS);
+    const finished = !!team.finishedAt && !team.timedOut && team.step >= team.route.length;
+    // ניקוד: חידות (פחות טעויות), ציוני המדריכים למשימות, ובונוס זמן למי שסיים את המסלול
+    const riddlePoints = team.route.reduce((sum, pointId) => {
+      const log = team.log.filter(l => l.point === pointId && l.kind === 'riddle');
+      if (!log.some(l => l.correct)) return sum;
+      const misses = log.filter(l => !l.correct).length;
+      return sum + Math.max(SCORING.riddleMin, SCORING.riddle - misses * SCORING.wrongPenalty);
+    }, 0);
+    const taskScores = of('task').map(l => l.score ?? 0);
+    const taskPoints = taskScores.reduce((sum, s) => sum + s * SCORING.taskFactor, 0);
+    const timeBonus = finished ? Math.floor(Math.max(0, LIMIT_MS - (end - team.startedAt)) / 60_000) * SCORING.minuteBonus : 0;
     return {
+      score: riddlePoints + taskPoints + timeBonus, riddlePoints, taskPoints, timeBonus,
+      taskAverage: taskScores.length ? Math.round(taskScores.reduce((a, b) => a + b, 0) / taskScores.length * 10) / 10 : null,
       id: team.id, name: team.name, color: team.color, ink: team.ink,
       players: members(game, team).map(p => p.name),
       done: of('task').length,
@@ -422,7 +447,7 @@ export function standings(game, now, detailsFor = () => true, reveal = true) {
       wrong: of('riddle').filter(l => !l.correct).length,
       skipped: of('skip').length,
       total: team.route.length,
-      finished: !!team.finishedAt && !team.timedOut && team.step >= team.route.length,
+      finished,
       timedOut: team.timedOut,
       playing: !team.finishedAt,
       time: end - team.startedAt,
@@ -436,13 +461,14 @@ export function standings(game, now, detailsFor = () => true, reveal = true) {
           correct: reveal ? point.correct : null,
           riddle: log.some(l => l.kind === 'riddle' && l.correct),
           task: log.some(l => l.kind === 'task'),
+          taskScore: log.find(l => l.kind === 'task')?.score ?? null,
           skipped: log.some(l => l.kind === 'skip'),
           attempts: log.map(({ point: _, time, ...rest }) => ({ ...rest, at: time - team.startedAt })),
         };
       }),
     };
   });
-  rows.sort((a, b) => b.done - a.done || a.time - b.time || a.wrong - b.wrong);
+  rows.sort((a, b) => b.score - a.score || a.time - b.time || a.wrong - b.wrong);
   return rows.map((row, i) => ({ ...row, rank: i + 1 }));
 }
 
@@ -468,7 +494,7 @@ export function playerView(game, player, now) {
   const view = {
     now, status, title: game.config.title, demo: game.config.demo, name: player.name,
     team: teamSummary(game, team), startedAt: team.startedAt, finishedAt: team.finishedAt,
-    timedOut: team.timedOut, limit: LIMIT_MS, radius: RADIUS,
+    timedOut: team.timedOut, limit: LIMIT_MS, radius: RADIUS, scoring: SCORING,
     canStart: status === 'open' && !team.startedAt,
   };
   if (team.startedAt) {
@@ -517,7 +543,7 @@ export function adminView(game, now) {
   return {
     now, code: game.code, access: game.access, status: statusOf(game), config: game.config,
     openedAt: game.openedAt, endedAt: game.endedAt, problems: problems(game), mail: game.mail,
-    locked: started(game), limit: LIMIT_MS, radius: RADIUS,
+    locked: started(game), limit: LIMIT_MS, radius: RADIUS, scoring: SCORING,
     teams: game.teams.map(t => ({
       ...teamSummary(game, t), step: t.step, total: t.route.length, stage: t.stage,
       startedAt: t.startedAt, finishedAt: t.finishedAt, timedOut: t.timedOut,
