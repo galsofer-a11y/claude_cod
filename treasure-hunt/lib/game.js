@@ -8,7 +8,9 @@ export const WAIT_MS = 120_000;
 export const LIMIT_MS = 90 * 60_000;
 export const FRESH_MS = 20_000;
 export const ACTIVE_MS = 45_000;
-const MAX_ACCURACY = 30;
+// דיוק GPS בטלפון ליד עצים ומבנים הוא לרוב 20 עד 60 מטר. פוסלים רק קריאה שגויה בבירור,
+// והמרחק מהנקודה עצמו נבדק תמיד מול 15 מטר
+const MAX_ACCURACY = 80;
 const PRESENCE_EXTRA = 25; // בזמן המתנה מאפשרים סטייה של GPS בלי לעצור את השעון
 const CODE_TRIES = 5;
 const CODE_WINDOW_MS = 120_000;
@@ -132,6 +134,15 @@ function fresh(position, now) {
 
 function near(point, position, now, extra = 0) {
   return fresh(position, now) && position.accuracy <= MAX_ACCURACY + extra && distance(position, point) <= RADIUS + extra;
+}
+
+/** למה החידה נפתחת או לא נפתחת, כדי להציג לשחקן סיבה ברורה */
+export function arrivalOf(point, position, now) {
+  if (!fresh(position, now)) return { ok: false, reason: 'stale' };
+  const meters = Math.round(distance(position, point));
+  if (position.accuracy > MAX_ACCURACY) return { ok: false, reason: 'accuracy', accuracy: position.accuracy, meters };
+  if (meters > RADIUS) return { ok: false, reason: 'far', accuracy: position.accuracy, meters };
+  return { ok: true, reason: 'ok', accuracy: position.accuracy, meters };
 }
 
 function buildRoutes(game) {
@@ -328,8 +339,10 @@ function atPoint(game, player, now) {
   tickTeam(game, team, now);
   check(!team.finishedAt, 'הקבוצה כבר סיימה', 409);
   const point = target(game, team);
-  check(fresh(player.position, now), 'מחכים לקליטת מיקום עדכני', 409);
-  check(near(point, player.position, now), `החידה נפתחת רק במרחק ${RADIUS} מטר מהנקודה`, 409);
+  const arrival = arrivalOf(point, player.position, now);
+  check(arrival.reason !== 'stale', 'מחכים לקליטת מיקום עדכני מה-GPS', 409);
+  check(arrival.reason !== 'accuracy', `קליטת ה-GPS חלשה כרגע (דיוק ${arrival.accuracy} מ׳). עמדו רגע בשטח פתוח ונסו שוב`, 409);
+  check(arrival.ok, `השרת מודד ${arrival.meters} מ׳ עד הנקודה. החידה נפתחת במרחק ${RADIUS} מטר`, 409);
   return { team, point };
 }
 
@@ -476,6 +489,7 @@ export function playerView(game, player, now) {
       target: { id: point.id, n: team.step + 1, lat: point.lat, lng: point.lng, name: point.name },
       stage: team.stage,
       arrived: near(point, player.position, now),
+      arrival: arrivalOf(point, player.position, now),
       wait: team.penalty && { remaining: team.penalty.remaining, counting: team.penalty.counting, by: team.penalty.by },
       votes: team.stage === 'riddle' ? {
         mine: !!team.votes[player.id],

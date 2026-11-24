@@ -73,8 +73,10 @@ test('riddle content needs 15 meters, fresh and accurate GPS', () => {
   assert.throws(() => g.openPoint(game, p, 2000));
   at(game, p, 0, 2000, 5, 0.00018); // כ-20 מטר
   assert.throws(() => g.openPoint(game, p, 2000), /15/);
-  at(game, p, 0, 2000, 60);
-  assert.throws(() => g.openPoint(game, p, 2000));
+  at(game, p, 0, 2000, 200);
+  assert.throws(() => g.openPoint(game, p, 2000), /GPS/);
+  at(game, p, 0, 2000, 45);
+  assert.equal(g.playerView(game, p, 2000).arrived, true, 'typical phone accuracy near trees still opens');
   at(game, p, 0, 2000, 5, 0.00012); // כ-13 מטר
   assert.equal(g.openPoint(game, p, 2000).question, 'Q0');
   assert.throws(() => g.imageOf(game, p, 2000 + g.FRESH_MS + 1));
@@ -264,4 +266,16 @@ test('HTTP: passwords, admin, full point, image privacy, mail', async t => {
   assert.equal((await call(`/admin/games/${code}`, { method: 'DELETE' }))[0], 200);
   assert.ok(!fs.existsSync(path.join(dir, `${code}.json`)));
   assert.equal((await fetch(`${base.replace('/api', '')}/%2e%2e%2fserver.js`)).status, 404);
+});
+
+test('arrival explains why a riddle does not open yet', () => {
+  const { game, players: [p] } = setup();
+  const view = () => g.playerView(game, p, 2000).arrival;
+  assert.equal(g.playerView(game, p, 2000).arrival.reason, 'stale');
+  at(game, p, 0, 2000, 5, 0.0003); // כ-33 מטר
+  assert.deepEqual([view().reason, view().meters], ['far', 33]);
+  at(game, p, 0, 2000, 5, 0.00001); // כ-1 מטר
+  assert.deepEqual([view().reason, view().meters], ['ok', 1]);
+  at(game, p, 0, 2000, 500);
+  assert.equal(view().reason, 'accuracy');
 });

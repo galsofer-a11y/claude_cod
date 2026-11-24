@@ -417,7 +417,7 @@ export function player(root, code) {
       $('#distance').textContent = fix ? meters(distance(fix, view.target)) : '…';
       const button = $('#open-point');
       button.disabled = !view.arrived;
-      button.textContent = !view.arrived ? `החידה תיפתח במרחק ${view.radius} מטר מהנקודה`
+      button.textContent = !view.arrived ? arrivalText()
         : view.stage === 'task' ? 'המשימה והקוד מהמדריך' : 'הגעתם! לפתיחת החידה';
       $('#waiting').hidden = !view.wait;
       paintCountdown();
@@ -563,14 +563,30 @@ export function player(root, code) {
 
   // ---- חלון הנקודה: חידה, מעטפה ומשימה ----
 
+  /** מסביר למה החידה עוד לא נפתחת, לפי מה שהשרת מדד */
+  function arrivalText() {
+    const arrival = view?.arrival;
+    if (!fix || !arrival || arrival.reason === 'stale') return 'מחכים לקליטת מיקום עדכני מה-GPS';
+    if (arrival.reason === 'accuracy') return `קליטת GPS חלשה (דיוק ${arrival.accuracy} מ׳). עמדו רגע בשטח פתוח`;
+    return `עוד ${meters(Math.max(0, arrival.meters - view.radius))} עד אזור החידה (${view.radius} מ׳ מהנקודה)`;
+  }
+
+  /** לפני פתיחת החידה מבקשים מה-GPS קריאה חדשה, ולא מסתמכים על קריאה ישנה */
+  function freshFix() {
+    if (demo || !navigator.geolocation) return Promise.resolve();
+    return new Promise(resolve => {
+      navigator.geolocation.getCurrentPosition(position => { onGps(position); resolve(); }, () => resolve(),
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 6000 });
+    });
+  }
+
   async function openPoint() {
     if (box || !view?.target) return;
     unlockSound();
+    if (!view.arrived) await freshFix();
     await sync();
     if (dead || box || !view?.target) return;
-    if (!view.arrived) {
-      return toast(fix ? `עוד ${meters(distance(fix, view.target))}. החידה נפתחת במרחק ${view.radius} מטר מהנקודה` : 'מחכים לקליטת המיקום');
-    }
+    if (!view.arrived) return toast(arrivalText());
     try {
       const data = await call('/point');
       if (dead || box || view.target?.id !== data.point) return;
