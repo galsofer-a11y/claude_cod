@@ -273,7 +273,11 @@ export function player(root, code) {
           return;
         }
         const offline = root.querySelector('#offline');
-        if (offline) offline.hidden = false;
+        if (offline) {
+          // מבדילים בין בעיית קליטה לבין תקלה בשרת, כדי שיהיה ברור מה לבדוק
+          offline.textContent = error.status ? `תקלה בשרת (${error.message}). מנסים שוב…` : 'אין חיבור לשרת. בדקו את הקליטה. מנסים שוב…';
+          offline.hidden = false;
+        }
         return;
       }
     } while (syncAgain && !dead && token);
